@@ -1,0 +1,141 @@
+NL  = Negative Large  
+NM  = Negative Medium  
+NS  = Negative Small  
+ZE  = Zero  
+PS  = Positive Small  
+PM  = Positive Medium  
+PL  = Positive Large
+#include <stdio.h>
+#include <math.h>
+
+// --------- Triangular membership function ----------
+double trimf(double x, double a, double b, double c) {
+    if (x <= a || x >= c) return 0.0;
+    else if (x == b) return 1.0;
+    else if (x < b) return (x - a) / (b - a);
+    else return (c - x) / (c - b);
+}
+
+// ------------ Angle Membership Functions ------------
+double angle_NL(double x) { return trimf(x, -30, -30, -20); }
+double angle_NM(double x) { return trimf(x, -30, -20, -10); }
+double angle_NS(double x) { return trimf(x, -20, -10,   0); }
+double angle_ZE(double x) { return trimf(x, -10,   0,  10); }
+double angle_PS(double x) { return trimf(x,   0,  10,  20); }
+double angle_PM(double x) { return trimf(x,  10,  20,  30); }
+double angle_PL(double x) { return trimf(x,  20,  30,  30); }
+
+// ------------ Velocity Membership Functions ------------
+double vel_NL(double x) { return trimf(x, -10, -10, -7); }
+double vel_NM(double x) { return trimf(x, -10, -7, -4); }
+double vel_NS(double x) { return trimf(x,  -7, -4,  0); }
+double vel_ZE(double x) { return trimf(x,  -4,  0,  4); }
+double vel_PS(double x) { return trimf(x,   0,  4,  7); }
+double vel_PM(double x) { return trimf(x,   4,  7, 10); }
+double vel_PL(double x) { return trimf(x,   7, 10, 10); }
+
+// ------------ Force Membership Functions (Output) ------------
+double f_NL(double x) { return trimf(x, -100, -100, -60); }
+double f_NM(double x) { return trimf(x, -100, -60,  -30); }
+double f_NS(double x) { return trimf(x,  -60, -30,    0); }
+double f_ZE(double x) { return trimf(x,  -30,   0,   30); }
+double f_PS(double x) { return trimf(x,    0,  30,   60); }
+double f_PM(double x) { return trimf(x,   30,  60,  100); }
+double f_PL(double x) { return trimf(x,   60, 100,  100); }
+
+// --------------- Fuzzy Inference System ----------------
+double fuzzy_force(double angle, double velocity) {
+
+    // --- fuzzify angle ---
+    double aNL = angle_NL(angle);
+    double aNM = angle_NM(angle);
+    double aNS = angle_NS(angle);
+    double aZE = angle_ZE(angle);
+    double aPS = angle_PS(angle);
+    double aPM = angle_PM(angle);
+    double aPL = angle_PL(angle);
+
+    // --- fuzzify velocity ---
+    double vNL = vel_NL(velocity);
+    double vNM = vel_NM(velocity);
+    double vNS = vel_NS(velocity);
+    double vZE = vel_ZE(velocity);
+    double vPS = vel_PS(velocity);
+    double vPM = vel_PM(velocity);
+    double vPL = vel_PL(velocity);
+
+    // --- Rule activation ---
+    double r[16]; // 1–15
+
+    r[1]  = fmin(aNL, vZE) ;  // -> PL
+    r[2]  = fmin(aZE, vNL) ;  // -> PL
+    r[3]  = fmin(aNM, vZE) ;  // -> PM
+    r[4]  = fmin(aZE, vNM) ;  // -> PM
+    r[5]  = fmin(aNS, vZE) ;  // -> PS
+    r[6]  = fmin(aZE, vNS) ;  // -> PS
+    r[7]  = fmin(aNS, vPS) ;  // -> PS
+    r[8]  = fmin(aZE, vZE) ;  // -> ZE
+    r[9]  = fmin(aZE, vPS) ;  // -> NS
+    r[10] = fmin(aPS, vZE) ;  // -> NS
+    r[11] = fmin(aPS, vNS) ;  // -> NS
+    r[12] = fmin(aZE, vPM) ;  // -> NM
+    r[13] = fmin(aPM, vZE) ;  // -> NM
+    r[14] = fmin(aZE, vPL) ;  // -> NL
+    r[15] = fmin(aPL, vZE) ;  // -> NL
+
+    // --- Defuzzification (centroid  -100 to +100) ---
+    double num = 0, den = 0;
+
+    for (int x = -100; x <= 100; x++) {
+
+        // Evaluate each rule's clipped MF
+        double mu = 0;
+
+        // Aggregate by taking max of all applicable rules:
+        mu = fmax(mu, fmin(r[1],  f_PL(x)));
+        mu = fmax(mu, fmin(r[2],  f_PL(x)));
+
+        mu = fmax(mu, fmin(r[3],  f_PM(x)));
+        mu = fmax(mu, fmin(r[4],  f_PM(x)));
+
+        mu = fmax(mu, fmin(r[5],  f_PS(x)));
+        mu = fmax(mu, fmin(r[6],  f_PS(x)));
+        mu = fmax(mu, fmin(r[7],  f_PS(x)));
+
+        mu = fmax(mu, fmin(r[8],  f_ZE(x)));
+
+        mu = fmax(mu, fmin(r[9],  f_NS(x)));
+        mu = fmax(mu, fmin(r[10], f_NS(x)));
+        mu = fmax(mu, fmin(r[11], f_NS(x)));
+
+        mu = fmax(mu, fmin(r[12], f_NM(x)));
+        mu = fmax(mu, fmin(r[13], f_NM(x)));
+
+        mu = fmax(mu, fmin(r[14], f_NL(x)));
+        mu = fmax(mu, fmin(r[15], f_NL(x)));
+
+        num += mu * x;
+        den += mu;
+    }
+
+    if (den == 0) return 0;
+    return num / den;
+}
+
+int main() {
+    double angle, velocity;
+
+    printf("Enter angle (deg): ");
+    scanf("%lf", &angle);
+
+    printf("Enter velocity: ");
+    scanf("%lf", &velocity);
+
+    double force = fuzzy_force(angle, velocity);
+
+    printf("Output force: %.3f\n", force);
+    return 0;
+}
+gcc fuzzy_pole.c -o fuzzy_pole.exe -lm
+fuzzy_pole.exe
+double F = fuzzy_force(angle, angular_velocity);
