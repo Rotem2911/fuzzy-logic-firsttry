@@ -1,0 +1,103 @@
+import numpy as np
+import skfuzzy as fuzz
+from skfuzzy import control as ctrl
+
+# --------------------------------------------------
+# 1. משתנים פאזיים
+# --------------------------------------------------
+
+angle = ctrl.Antecedent(np.arange(-20, 21, 0.1), 'angle')
+velocity = ctrl.Antecedent(np.arange(-10, 11, 0.1), 'velocity')
+force = ctrl.Consequent(np.arange(-100, 101, 1), 'force')
+
+# --------------------------------------------------
+# 2. פונקציות שייכות
+# --------------------------------------------------
+
+labels = ['NL', 'NM', 'NS', 'ZE', 'PS', 'PM', 'PL']
+
+angle['NL'] = fuzz.trimf(angle.universe, [-20, -20, -10])
+angle['NM'] = fuzz.trimf(angle.universe, [-20, -10, -5])
+angle['NS'] = fuzz.trimf(angle.universe, [-10, -5, 0])
+angle['ZE'] = fuzz.trimf(angle.universe, [-2, 0, 2])
+angle['PS'] = fuzz.trimf(angle.universe, [0, 5, 10])
+angle['PM'] = fuzz.trimf(angle.universe, [5, 10, 20])
+angle['PL'] = fuzz.trimf(angle.universe, [10, 20, 20])
+
+velocity['NL'] = fuzz.trimf(velocity.universe, [-10, -10, -5])
+velocity['NM'] = fuzz.trimf(velocity.universe, [-10, -5, -2])
+velocity['NS'] = fuzz.trimf(velocity.universe, [-5, -2, 0])
+velocity['ZE'] = fuzz.trimf(velocity.universe, [-1, 0, 1])
+velocity['PS'] = fuzz.trimf(velocity.universe, [0, 2, 5])
+velocity['PM'] = fuzz.trimf(velocity.universe, [2, 5, 10])
+velocity['PL'] = fuzz.trimf(velocity.universe, [5, 10, 10])
+
+force['NL'] = fuzz.trimf(force.universe, [-100, -100, -60])
+force['NM'] = fuzz.trimf(force.universe, [-100, -60, -30])
+force['NS'] = fuzz.trimf(force.universe, [-60, -30, 0])
+force['ZE'] = fuzz.trimf(force.universe, [-10, 0, 10])
+force['PS'] = fuzz.trimf(force.universe, [0, 30, 60])
+force['PM'] = fuzz.trimf(force.universe, [30, 60, 100])
+force['PL'] = fuzz.trimf(force.universe, [60, 100, 100])
+
+# --------------------------------------------------
+# 3. חוקי הבקרה (בדיוק לפי הרשימה שלך)
+# --------------------------------------------------
+
+rules = [
+
+    ctrl.Rule(angle['NL'] & velocity['ZE'], force['PL']),
+    ctrl.Rule(angle['ZE'] & velocity['NL'], force['PL']),
+
+    ctrl.Rule(angle['NM'] & velocity['ZE'], force['PM']),
+    ctrl.Rule(angle['ZE'] & velocity['NM'], force['PM']),
+
+    ctrl.Rule(angle['NS'] & velocity['ZE'], force['PS']),
+    ctrl.Rule(angle['ZE'] & velocity['NS'], force['PS']),
+
+    ctrl.Rule(angle['NS'] & velocity['PS'], force['PS']),
+
+    ctrl.Rule(angle['ZE'] & velocity['ZE'], force['ZE']),
+
+    ctrl.Rule(angle['ZE'] & velocity['PS'], force['NS']),
+    ctrl.Rule(angle['PS'] & velocity['ZE'], force['NS']),
+    ctrl.Rule(angle['PS'] & velocity['NS'], force['NS']),
+
+    ctrl.Rule(angle['ZE'] & velocity['PM'], force['NM']),
+    ctrl.Rule(angle['NM'] & velocity['ZE'], force['NM']),
+
+    ctrl.Rule(angle['ZE'] & velocity['PL'], force['NL']),
+    ctrl.Rule(angle['PL'] & velocity['ZE'], force['NL'])
+]
+
+# --------------------------------------------------
+# 4. יצירת הבקר
+# --------------------------------------------------
+
+balancing_ctrl = ctrl.ControlSystem(rules)
+balancing_sim = ctrl.ControlSystemSimulation(balancing_ctrl)
+
+# --------------------------------------------------
+# 5. פונקציית בקרה
+# --------------------------------------------------
+
+def fuzzy_controller(angle_input, velocity_input):
+    balancing_sim.input['angle'] = angle_input
+    balancing_sim.input['velocity'] = velocity_input
+    balancing_sim.compute()
+    return balancing_sim.output['force']
+
+
+# --------------------------------------------------
+# 6. בדיקה
+# --------------------------------------------------
+
+if __name__ == "__main__":
+    angle_test = -6.0       # מעלות
+    velocity_test = 1.5     # deg/sec
+
+    output_force = fuzzy_controller(angle_test, velocity_test)
+
+    print("Angle:", angle_test)
+    print("Velocity:", velocity_test)
+    print("Motor force:", output_force)
