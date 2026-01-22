@@ -1,0 +1,119 @@
+#include <Arduino.h>
+
+/* ===== pins ===== */
+
+#define ENA 5
+#define IN1 7
+#define IN2 8
+#define ENB 6
+#define IN3 9
+#define IN4 10
+
+#define TRIG_PIN 12
+#define ECHO_PIN 11
+
+#define STOP_DISTANCE 20
+
+/* ===== fuzzy limits ===== */
+
+#define FORCE_MIN -100
+#define FORCE_MAX  100
+#define STEP 1
+
+/* ===== triangular MF ===== */
+
+float trimf(float x,float a,float b,float c)
+{
+    if(x<=a||x>=c) return 0;
+    if(x==b) return 1;
+    if(x<b) return (x-a)/(b-a);
+    return (c-x)/(c-b);
+}
+
+/* ===== fuzzy sets ===== */
+
+float aNL(float x){return trimf(x,-20,-20,-10);}
+float aNM(float x){return trimf(x,-20,-10,-5);}
+float aNS(float x){return trimf(x,-10,-5,0);}
+float aZE(float x){return trimf(x,-2,0,2);}
+float aPS(float x){return trimf(x,0,5,10);}
+float aPM(float x){return trimf(x,5,10,20);}
+float aPL(float x){return trimf(x,10,20,20);}
+
+float vNL(float x){return trimf(x,-10,-10,-5);}
+float vNM(float x){return trimf(x,-10,-5,-2);}
+float vNS(float x){return trimf(x,-5,-2,0);}
+float vZE(float x){return trimf(x,-1,0,1);}
+float vPS(float x){return trimf(x,0,2,5);}
+float vPM(float x){return trimf(x,2,5,10);}
+float vPL(float x){return trimf(x,5,10,10);}
+
+float fNL(float x){return trimf(x,-100,-100,-60);}
+float fNM(float x){return trimf(x,-100,-60,-30);}
+float fNS(float x){return trimf(x,-60,-30,0);}
+float fZE(float x){return trimf(x,-10,0,10);}
+float fPS(float x){return trimf(x,0,30,60);}
+float fPM(float x){return trimf(x,30,60,100);}
+float fPL(float x){return trimf(x,60,100,100);}
+
+/* ===== fuzzy controller ===== */
+
+float fuzzy(float angle,float vel)
+{
+    float PL = min(aNL(angle),vZE(vel));
+    float ZE = min(aZE(angle),vZE(vel));
+    float NL = min(aPL(angle),vZE(vel));
+
+    float num=0,den=0;
+
+    for(float x=FORCE_MIN;x<=FORCE_MAX;x+=STEP)
+    {
+        float mu=max(
+            min(NL,fNL(x)),
+            max(min(ZE,fZE(x)),min(PL,fPL(x)))
+        );
+        num+=x*mu;
+        den+=mu;
+    }
+
+    if(den==0) return 0;
+    return num/den;
+}
+
+/* ===== MAIN ===== */
+
+int main()
+{
+    init();
+
+    pinMode(ENA,OUTPUT);
+    pinMode(IN1,OUTPUT);
+    pinMode(IN2,OUTPUT);
+
+    pinMode(ENB,OUTPUT);
+    pinMode(IN3,OUTPUT);
+    pinMode(IN4,OUTPUT);
+
+    pinMode(TRIG_PIN,OUTPUT);
+    pinMode(ECHO_PIN,INPUT);
+
+    while(true)
+    {
+        float angle = -3.0;
+        float velocity = 1.0;
+
+        float force = fuzzy(angle,velocity);
+
+        int pwm = constrain((int)force,-255,255);
+
+        digitalWrite(IN1,pwm>=0);
+        digitalWrite(IN2,pwm<0);
+        analogWrite(ENA,abs(pwm));
+
+        digitalWrite(IN3,pwm>=0);
+        digitalWrite(IN4,pwm<0);
+        analogWrite(ENB,abs(pwm));
+
+        delay(10);
+    }
+}
